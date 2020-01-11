@@ -41,7 +41,7 @@ export class MainContainer extends React.Component<Props, State> {
   }
 
   private rerenderDiagram = (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLTextAreaElement>
   ): void => {
     if (!event.currentTarget) {
       throw Error("Error target is missing used by updateDiagram");
@@ -67,13 +67,13 @@ export class MainContainer extends React.Component<Props, State> {
 
   public render() {
     return (
-      <div>
-        <input
-          type="text"
+      <div className="com-p-MainContainer__container">
+        <textarea
+          className="com-p-MainContainer__textarea"
           value={this.state.sqlStatement}
           onChange={this.rerenderDiagram}
-        ></input>
-        <div id="graph"></div>
+        />
+        <div id="graph" className="com-p-MainContainer__graph"></div>
       </div>
     );
   }

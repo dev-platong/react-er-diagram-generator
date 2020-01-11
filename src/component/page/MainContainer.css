@@ -1,0 +1,15 @@
+.com-p-MainContainer__textarea {
+  height: 100vh;
+  width: 40vw;
+}
+
+.com-p-MainContainer__graph {
+  box-sizing: border-box;
+  border: 1px solid;
+  height: 100vh;
+  width: 60vw;
+}
+
+.com-p-MainContainer__container {
+  display: flex;
+}
