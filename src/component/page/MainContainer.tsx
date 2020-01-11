@@ -60,7 +60,7 @@ export class MainContainer extends React.Component<Props, State> {
       return db.toDot();
     } catch (err) {
       //TODO: display;
-      console.error("Invalid SQL Syntax");
+      console.error("Invalid SQL Syntax", err);
       throw err;
     }
   };

@@ -250,8 +250,16 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
             s.length > 0 &&
             s !== ")"
           ) {
+            if (s.indexOf("ENGINE") !== -1) {
+              return;
+            }
+
+            // TODO:
+            if (s.indexOf("KEY") !== -1) {
+              return;
+            }
             // relationship TODO: !=
-            if (s.indexOf(":") > -1) {
+            if (s.indexOf("-:+") > -1) {
               relationshipText.push(s);
             } else {
               // table
@@ -273,6 +281,7 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
         db.pushTable(table);
       }
 
+      console.log(relationshipText);
       relationshipText.forEach(s => {
         db.pushRelationships(this.parseRelationShip(db, s));
       });
@@ -295,18 +304,18 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
       }
       const cardinality = relationStr.replace("[", "").replace("]", "");
       switch (cardinality) {
-        case "1:1":
+        case "1-:+1":
           relationship.setCardinality(Cardinality.OneToOne);
           break;
-        case "1:*":
+        case "1-:+*":
           relationship.setCardinality(Cardinality.OneToMany);
           break;
-        case "*:*":
+        case "*-:+*":
           relationship.setCardinality(Cardinality.ManyToMany);
           break;
         default:
           throw new Error(
-            `Unknown Cardinality: '${cardinality}' (Options are 1:1, 1:*, *:*)`
+            `Unknown Cardinality: '${cardinality}' (Options are 1-:+1, 1-:+*, *-:+*)`
           );
       }
       return relationship;
@@ -352,7 +361,7 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
       }
 
       if (splits.length > 0) {
-        field.setName(splits[0]);
+        field.setName(splits[0].replace(/\`/g, ""));
       }
       if (splits.length > 1) {
         const [dataType, length] = SQLInterpreter.dataTypeParser(splits[1]);
@@ -372,10 +381,15 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
     }
 
     private determineTable(input: string): string | null {
-      if (input.indexOf("create table ") > -1) {
+      if (
+        input.indexOf("create table ") > -1 ||
+        input.indexOf("CREATE TABLE ") > -1
+      ) {
         const splits = input.split(" ");
         if (splits.length > 2) {
-          return splits[2];
+          const a = splits[2].replace(/\`/g, "");
+          console.log(a);
+          return a;
         }
       }
 

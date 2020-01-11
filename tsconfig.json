@@ -4,7 +4,7 @@
     "noUnusedLocals": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
-    "outDir": "./dist/",
+    "outDir": "./script/",
     "sourceMap": true,
     "noImplicitAny": true,
     "lib": ["dom", "ES2017"],
