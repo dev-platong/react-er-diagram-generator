@@ -1,3 +1,9 @@
+import { safeSqlSplitLine } from "./safeSqlSplitLine";
+import { ParseSqlLine } from "./ParseSqlLine";
+import { TableNameLibralian } from "./TableNameLibralian";
+import { estimateIsForeign } from "./estimateIsForeign";
+import { RelationshipStore, DBRelation } from "./RelationshipStore";
+
 export namespace ErdViz {
   export class Database {
     private tables: Array<Table> = new Array<Table>();
@@ -93,9 +99,10 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
 
   export class Field {
     private isNullable?: boolean;
+    private isPrimary?: boolean;
+    private isForeign?: boolean;
     private length?: number;
     private name?: string;
-    private primaryKey: boolean;
     private table: Table;
     private type: string;
 
@@ -108,6 +115,21 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
 
     public setIsNullable(this: Field, isNullable: boolean): void {
       this.isNullable = isNullable;
+    }
+
+    public setIsPrimary(this: Field, isPrimary: boolean): void {
+      this.isPrimary = isPrimary;
+    }
+
+    public getIsForeign(this: Field): boolean {
+      if (this.isForeign === undefined) {
+        throw Error("");
+      }
+      return this.isForeign;
+    }
+
+    public setIsForeign(this: Field, isForeign: boolean): void {
+      this.isForeign = isForeign;
     }
 
     public setLength(this: Field, length: number): void {
@@ -138,7 +160,8 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
     }
 
     public toDot(this: Field): string {
-      const name = this.primaryKey ? `<B>${this.name}</B>` : this.name;
+      console.log(`${this.name} pk:${this.isPrimary} fk:${this.isForeign}`);
+      const name = this.isPrimary ? `<B>${this.name}</B>` : this.name;
       const len: string =
         this.length && this.length > 0 ? `(${this.length})` : "";
       const nullable = !this.getIsNullable() ? " <B>NOT NULL</B>" : "";
@@ -203,7 +226,7 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
     }
   }
 
-  class SQLInterpreter {
+  export class SQLInterpreter {
     public static stateIsComment(statement: string): boolean {
       return statement.startsWith("#");
     }
@@ -238,50 +261,56 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
       const relationshipText = new Array<string>();
 
       let table: Table | null | undefined;
-      input
-        .split("\n")
-        .map(s => {
-          return s.trim();
-        })
-        .forEach(s => {
-          if (
-            s &&
-            !SQLInterpreter.stateIsComment(s) &&
-            s.length > 0 &&
-            s !== ")"
-          ) {
-            if (s.indexOf("ENGINE") !== -1) {
-              return;
-            }
+      const sqlLines: string[] = safeSqlSplitLine(input);
+      const tableNameLibralian = TableNameLibralian.getInstance();
+      tableNameLibralian.setTableNames(sqlLines);
+      sqlLines.forEach(s => {
+        if (s && s.length > 0 && s !== ")") {
+          if (s.indexOf("ENGINE") !== -1) {
+            return;
+          }
 
-            // TODO:
-            if (s.indexOf("KEY") !== -1) {
-              return;
-            }
-            // relationship TODO: !=
-            if (s.indexOf("-:+") > -1) {
-              relationshipText.push(s);
-            } else {
-              // table
-              const tableName = this.determineTable(s);
-              if (table && !tableName) {
-                table.fields.push(this.getField(s));
-              }
-              if (tableName) {
-                if (table) {
-                  db.pushTable(table);
+          // TODO:
+          if (s.indexOf("KEY") !== -1 && s.indexOf("PRIMARY") === -1) {
+            return;
+          }
+          // relationship TODO: !=
+          if (s.indexOf("-:+") > -1) {
+            relationshipText.push(s);
+          } else {
+            // table
+            const tableName = ParseSqlLine.specifyTableName(s);
+            if (table && tableName === "") {
+              const field = this.getField(s);
+              field.getName();
+              if (field.getIsForeign()) {
+                if (field.getName().replace(/\_id$/, "") !== table.name) {
+                  const relationshipStore = RelationshipStore.getInstance();
+                  relationshipStore.pushRelationship({
+                    dbRelation: DBRelation.OneToMany,
+                    from: field.getName().replace(/\_id$/, ""),
+                    to: table.name
+                  });
                 }
-                table = new Table({ name: tableName });
               }
+              table.fields.push(field);
+            }
+            if (tableName) {
+              if (table) {
+                db.pushTable(table);
+              }
+              table = new Table({ name: tableName });
             }
           }
-        });
+        }
+      });
+      const relationshipStore = RelationshipStore.getInstance();
+      console.log(relationshipStore.getRelationship());
       // tail
       if (table != null) {
         db.pushTable(table);
       }
 
-      console.log(relationshipText);
       relationshipText.forEach(s => {
         db.pushRelationships(this.parseRelationShip(db, s));
       });
@@ -363,6 +392,8 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
       if (splits.length > 0) {
         field.setName(splits[0].replace(/\`/g, ""));
       }
+      field.setIsForeign(estimateIsForeign(field));
+      field.setIsPrimary(input.indexOf("PRIMARY") !== -1);
       if (splits.length > 1) {
         const [dataType, length] = SQLInterpreter.dataTypeParser(splits[1]);
         field.setType(dataType);
@@ -378,25 +409,6 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
       );
 
       return field;
-    }
-
-    private determineTable(input: string): string | null {
-      if (
-        input.indexOf("create table ") > -1 ||
-        input.indexOf("CREATE TABLE ") > -1
-      ) {
-        const splits = input.split(" ");
-        if (splits.length > 2) {
-          const a = splits[2].replace(/\`/g, "");
-          console.log(a);
-          return a;
-        }
-      }
-
-      if (input.startsWith("[") && input.endsWith("]") && input.length > 2) {
-        return input.substring(1, input.length - 1);
-      }
-      return null;
     }
   }
 }
