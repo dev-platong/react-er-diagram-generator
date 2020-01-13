@@ -2,6 +2,10 @@
   "name": "react-er-diagram-generator",
   "version": "0.1.0",
   "private": true,
+  "scripts": {
+    "build": "webpack",
+    "dev": "webpack-dev-server"
+  },
   "dependencies": {
     "@types/jest": "24.0.25",
     "@types/node": "13.1.6",
