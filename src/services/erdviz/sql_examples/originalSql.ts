@@ -25,14 +25,3 @@ OWNER_ID INT NOT NULL,
 BOOK_ID INT NOT NULL
 CREATED_DATE_UTC
 CREATED_BY
-
-# Relationships are defined by:
-# TableName.FieldName [Cardinality] TableName.FieldName
-# Cardinality can be:
-# 1-:+* = One to Many
-# 1-:+1 = One to One
-# *-:+* = Many to Many
-
-AUTHOR.AUTHOR_ID [1-:+*] BOOK.AUTHOR_ID
-OWNER.OWNER_ID 1-:+* INVENTORY.OWNER_ID
-BOOK.BOOK_ID 1-:+* INVENTORY.BOOK_ID`;
