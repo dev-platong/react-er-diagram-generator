@@ -1,25 +1,23 @@
-export enum DBRelation {
-  OneToMany
-}
-
-interface RelationShip {
-  dbRelation: DBRelation;
-  from: string;
-  to: string;
-}
+import { Relationship } from "./Relationship";
 
 export class RelationshipStore {
-  private relationships: RelationShip[] = [];
+  private relationships: Relationship[] = [];
   private static relationshipStore = new RelationshipStore();
   private constructor() {}
   public pushRelationship(
     this: RelationshipStore,
-    relation: RelationShip
+    relation: Relationship
   ): void {
     this.relationships.push(relation);
   }
-  public getRelationship(this: RelationshipStore): RelationShip[] {
+  public getRelationship(this: RelationshipStore): Relationship[] {
     return this.relationships;
+  }
+  public setRelationship(
+    this: RelationshipStore,
+    relationships: Relationship[]
+  ): void {
+    this.relationships = relationships;
   }
   public static getInstance(): RelationshipStore {
     return RelationshipStore.relationshipStore;

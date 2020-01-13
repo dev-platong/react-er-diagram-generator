@@ -2,12 +2,15 @@ import { safeSqlSplitLine } from "./safeSqlSplitLine";
 import { ParseSqlLine } from "./ParseSqlLine";
 import { TableNameLibralian } from "./TableNameLibralian";
 import { estimateIsForeign } from "./estimateIsForeign";
-import { RelationshipStore, DBRelation } from "./RelationshipStore";
+import { RelationshipStore } from "./RelationshipStore";
+import { Cardinality } from "./Cardinality";
+import { Relationship } from "./Relationship";
+import { RelationshipSyntaxEntity } from "./syntax_entity/RelationSyntaxEntity";
 
 export namespace ErdViz {
   export class Database {
-    private tables: Array<Table> = new Array<Table>();
-    private relationships: Array<Relationship> = new Array<Relationship>();
+    private tables = new Array<Table>();
+    private relationships = new Array<RelationshipSyntaxEntity>();
 
     public getTables(): Array<Table> {
       return this.tables;
@@ -17,11 +20,14 @@ export namespace ErdViz {
       this.tables.push(table);
     }
 
-    public getRelationships(this: Database): Array<Relationship> {
+    public getRelationships(this: Database): Array<RelationshipSyntaxEntity> {
       return this.relationships;
     }
 
-    public pushRelationships(this: Database, relationship: Relationship): void {
+    public pushRelationships(
+      this: Database,
+      relationship: RelationshipSyntaxEntity
+    ): void {
       this.relationships.push(relationship);
     }
 
@@ -173,59 +179,6 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
     }
   }
 
-  export enum Cardinality {
-    OneToOne,
-    OneToMany,
-    ManyToMany
-  }
-
-  export class Relationship {
-    private cardinality?: Cardinality;
-    private fromField?: Field;
-    private identifying: boolean;
-    private label: string;
-    private toField?: Field;
-
-    public setCardinality(this: Relationship, cardinality: Cardinality) {
-      this.cardinality = cardinality;
-    }
-
-    public setFromField(this: Relationship, fromField: Field) {
-      this.fromField = fromField;
-    }
-
-    public setIdentifying(this: Relationship, identifying: boolean) {
-      this.identifying = identifying;
-    }
-
-    public setToField(this: Relationship, toField: Field) {
-      this.toField = toField;
-    }
-
-    public toDot(): string {
-      if (!this.toField || !this.fromField) {
-        throw Error("To Field or toFrom or both is not declared.");
-      }
-      const label = this.label ? `\nlable=<<FONT>${this.label}</FONT>>` : "";
-      const style = this.identifying ? "solid" : "dotted";
-      let cardStr = "";
-      switch (this.cardinality) {
-        case Cardinality.OneToOne:
-          cardStr = `[arrowhead=noneotee,headlabel=<<FONT>1</FONT>>,${label}style=${style},arrowtail=noneotee,taillabel=<<FONT>1</FONT>>]`;
-          break;
-        case Cardinality.OneToMany:
-          cardStr = `[arrowhead=noneotee,headlabel=<<FONT>1</FONT>>,${label}style=${style},arrowtail=ocrow,taillabel=<<FONT>0..N</FONT>>]`;
-          break;
-        case Cardinality.ManyToMany:
-          cardStr = `[arrowhead=ocrow,headlabel=<<FONT>0..N</FONT>>,${label}style=${style},arrowtail=ocrow,taillabel=<<FONT>1..1</FONT>>]`;
-          break;
-      }
-      return `\n${this.toField.getTable().name} -- ${
-        this.fromField.getTable().name
-      } ${cardStr} ;`;
-    }
-  }
-
   export class SQLInterpreter {
     public static stateIsComment(statement: string): boolean {
       return statement.startsWith("#");
@@ -258,12 +211,15 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
     // FIXME: Clean up structure
     public parse(this: DotGenerator, input: string): Database {
       const db = new Database();
-      const relationshipText = new Array<string>();
 
       let table: Table | null | undefined;
       const sqlLines: string[] = safeSqlSplitLine(input);
       const tableNameLibralian = TableNameLibralian.getInstance();
       tableNameLibralian.setTableNames(sqlLines);
+
+      const relationshipStore = RelationshipStore.getInstance();
+      relationshipStore.setRelationship([]);
+
       sqlLines.forEach(s => {
         if (s && s.length > 0 && s !== ")") {
           if (s.indexOf("ENGINE") !== -1) {
@@ -274,108 +230,73 @@ graph [label=<<FONT POINT-SIZE="20">${name}</FONT>>,
           if (s.indexOf("KEY") !== -1 && s.indexOf("PRIMARY") === -1) {
             return;
           }
-          // relationship TODO: !=
-          if (s.indexOf("-:+") > -1) {
-            relationshipText.push(s);
-          } else {
-            // table
-            const tableName = ParseSqlLine.specifyTableName(s);
-            if (table && tableName === "") {
-              const field = this.getField(s);
-              field.getName();
-              if (field.getIsForeign()) {
-                if (field.getName().replace(/\_id$/, "") !== table.name) {
-                  const relationshipStore = RelationshipStore.getInstance();
-                  relationshipStore.pushRelationship({
-                    dbRelation: DBRelation.OneToMany,
-                    from: field.getName().replace(/\_id$/, ""),
-                    to: table.name
-                  });
-                }
+          // table
+          const tableName = ParseSqlLine.specifyTableName(s);
+          if (table && tableName === "") {
+            const field = this.getField(s);
+            field.getName();
+            if (field.getIsForeign()) {
+              if (field.getName().replace(/\_id$/, "") !== table.name) {
+                const relationshipStore = RelationshipStore.getInstance();
+                relationshipStore.pushRelationship({
+                  dbRelation: Cardinality.OneToMany,
+                  fromTable: field.getName().replace(/\_id$/, ""),
+                  toTable: table.name
+                });
               }
-              table.fields.push(field);
             }
-            if (tableName) {
-              if (table) {
-                db.pushTable(table);
-              }
-              table = new Table({ name: tableName });
+            table.fields.push(field);
+          }
+          if (tableName) {
+            if (table) {
+              db.pushTable(table);
             }
+            table = new Table({ name: tableName });
           }
         }
       });
-      const relationshipStore = RelationshipStore.getInstance();
-      console.log(relationshipStore.getRelationship());
       // tail
       if (table != null) {
         db.pushTable(table);
       }
 
-      relationshipText.forEach(s => {
-        db.pushRelationships(this.parseRelationShip(db, s));
+      relationshipStore.getRelationship().forEach(r => {
+        db.pushRelationships(this.parseRelationShip(db, r));
       });
 
       return db;
     }
 
-    private parseRelationShip(db: Database, s: string): Relationship {
-      const relationStatements = s.split(" ");
-      if (relationStatements.length < 3) {
-        throw Error("Relationship statement format is invalid.");
-      }
-
-      const relationship = new Relationship();
-      const [from, relationStr, to] = relationStatements;
-      relationship.setFromField(this.findField(db, from));
-      relationship.setToField(this.findField(db, to));
+    private parseRelationShip(
+      db: Database,
+      relationship: Relationship
+    ): RelationshipSyntaxEntity {
+      const r = new RelationshipSyntaxEntity();
+      r.setFromField(this.findField(db, relationship.fromTable));
+      r.setToField(this.findField(db, relationship.toTable));
+      /*
       if (relationStr.indexOf("[") > -1) {
         relationship.setIdentifying(true);
-      }
-      const cardinality = relationStr.replace("[", "").replace("]", "");
-      switch (cardinality) {
-        case "1-:+1":
-          relationship.setCardinality(Cardinality.OneToOne);
-          break;
-        case "1-:+*":
-          relationship.setCardinality(Cardinality.OneToMany);
-          break;
-        case "*-:+*":
-          relationship.setCardinality(Cardinality.ManyToMany);
-          break;
-        default:
-          throw new Error(
-            `Unknown Cardinality: '${cardinality}' (Options are 1-:+1, 1-:+*, *-:+*)`
-          );
-      }
-      return relationship;
+      }*/
+      r.setCardinality(Cardinality.OneToMany);
+      return r;
     }
 
-    private findField(db: Database, s: string): Field {
-      const splits = s.split(".");
-      if (splits.length !== 2) {
-        throw new Error(`Error around '${s}'`);
-      }
-      let targetTable: Table | undefined;
-      let targetField: Field | undefined;
-      db.getTables().forEach(table => {
-        if (table.name.toUpperCase() === splits[0].toUpperCase()) {
-          targetTable = table;
-        }
-      });
-      if (targetTable === undefined) {
-        throw new Error(`Relationship: Unable to find table '${s}'`);
+    private findField(db: Database, tableName: string): Field {
+      const targetTable = db
+        .getTables()
+        .find(table => table.name === tableName);
+      if (!targetTable) {
+        throw new Error(`Relationship: Unable to find table '${tableName}'`);
       }
 
-      // FIXME: 構造全体がおかしいから型推論が死んでる
-      targetTable.fields.forEach(field => {
-        if (field.getName().toUpperCase() === splits[1].toUpperCase()) {
-          targetField = field;
-          field.setTable(targetTable as Table);
-        }
-      });
+      const targetField = targetTable.fields.find(
+        field => field.getName() === tableName + "_id"
+      );
       if (!targetField) {
-        throw new Error(`Relationship: Unable to find field '${s}'`);
+        throw new Error(`Relationship: Unable to find field '${targetField}'`);
       }
+      targetField.setTable(targetTable);
       return targetField;
     }
 
