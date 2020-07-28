@@ -10,11 +10,17 @@ const _ = d3Graphviz.graphviz;
 export const MainContainer: React.FC = () => {
   const [graphviz, setGraphviz] = React.useState<any>(null);
   const [sqlStatement, setSQLStatement] = React.useState(originalSql);
+  const dotGeneratorRef = React.useRef<ErdViz.DotGenerator>();
+  React.useEffect(() => {
+    dotGeneratorRef.current = new ErdViz.DotGenerator();
+  }, []);
 
-  const interpret = (input: string): string => {
+  const interpret = (inputSQL: string): string => {
+    if (dotGeneratorRef.current === undefined) {
+      throw new Error("Fatal: Ref container has something bugs.");
+    }
     try {
-      const dotGenerator = new ErdViz.DotGenerator();
-      const db = dotGenerator.parse(input);
+      const db = dotGeneratorRef.current.parse(inputSQL);
       return db.toDot();
     } catch (err) {
       //TODO: display;
@@ -55,7 +61,7 @@ export const MainContainer: React.FC = () => {
         value={sqlStatement}
         onChange={rerenderDiagram}
       />
-      <div id="graph" className="com-p-MainContainer__graph"></div>
+      <div id="graph" className="com-p-MainContainer__graph" />
     </div>
   );
 };
